@@ -1,6 +1,8 @@
 import graphene
 from graphene_django import DjangoObjectType
+from graphene_django.filter import DjangoFilterConnectionField
 from .models import Customer, Product, Order
+from .filters import CustomerFilter, ProductFilter, OrderFilter
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -10,17 +12,20 @@ import re
 class CustomerType(DjangoObjectType):
     class Meta:
         model = Customer
-        fields = ("id", "name", "email", "phone")
+        fields = ("id", "name", "email", "phone", "created_at")
+        filterset_class = CustomerFilter
 
 class ProductType(DjangoObjectType):
     class Meta:
         model = Product
         fields = ("id", "name", "price", "stock")
+        filterset_class = ProductFilter
 
 class OrderType(DjangoObjectType):
     class Meta:
         model = Order
         fields = ("id", "customer", "products", "order_date", "total_amount")
+        filterset_class = OrderFilter
 
 # Mutations
 class CreateCustomer(graphene.Mutation):
@@ -126,16 +131,30 @@ class CreateOrder(graphene.Mutation):
 
 # Query class
 class Query(graphene.ObjectType):
-    customers = graphene.List(CustomerType)
-    products = graphene.List(ProductType)
-    orders = graphene.List(OrderType)
+    all_customers = DjangoFilterConnectionField(CustomerType)
+    all_products = DjangoFilterConnectionField(ProductType)
+    all_orders = DjangoFilterConnectionField(OrderType)
 
-    def resolve_customers(root, info):
-        return Customer.objects.all()
-    def resolve_products(root, info):
-        return Product.objects.all()
-    def resolve_orders(root, info):
-        return Order.objects.all()
+    def resolve_all_customers(root, info, **kwargs):
+        qs = Customer.objects.all()
+        order_by = kwargs.get('order_by')
+        if order_by:
+            qs = qs.order_by(order_by)
+        return qs
+
+    def resolve_all_products(root, info, **kwargs):
+        qs = Product.objects.all()
+        order_by = kwargs.get('order_by')
+        if order_by:
+            qs = qs.order_by(order_by)
+        return qs
+
+    def resolve_all_orders(root, info, **kwargs):
+        qs = Order.objects.all()
+        order_by = kwargs.get('order_by')
+        if order_by:
+            qs = qs.order_by(order_by)
+        return qs
 
 # Mutation class
 class Mutation(graphene.ObjectType):
