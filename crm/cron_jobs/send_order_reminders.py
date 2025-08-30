@@ -4,8 +4,8 @@ import os
 import sys
 import django
 from datetime import datetime, timedelta
-import requests
-import json
+from gql import gql, Client
+from gql.transport.requests import RequestsHTTPTransport
 
 # Add the project root to the Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,8 +22,16 @@ def send_graphql_query():
     seven_days_ago = datetime.now() - timedelta(days=7)
     seven_days_ago_str = seven_days_ago.isoformat()
     
+    # Create a GraphQL client
+    transport = RequestsHTTPTransport(
+        url='http://localhost:8000/graphql',
+        headers={'Content-Type': 'application/json'},
+        timeout=30
+    )
+    client = Client(transport=transport, fetch_schema_from_transport=False)
+    
     # GraphQL query to get orders from the last 7 days
-    query = """
+    query = gql("""
     query GetRecentOrders($orderDateGte: DateTime) {
         allOrders(orderDateGte: $orderDateGte) {
             edges {
@@ -38,41 +46,19 @@ def send_graphql_query():
             }
         }
     }
-    """
+    """)
     
     variables = {
         "orderDateGte": seven_days_ago_str
     }
     
-    payload = {
-        "query": query,
-        "variables": variables
-    }
-    
     try:
-        # Send the GraphQL request
-        response = requests.post(
-            'http://localhost:8000/graphql',
-            json=payload,
-            headers={'Content-Type': 'application/json'},
-            timeout=30
-        )
+        # Execute the GraphQL query
+        result = client.execute(query, variable_values=variables)
+        return {"data": result}
         
-        if response.status_code == 200:
-            return response.json()
-        else:
-            print(f"GraphQL request failed with status {response.status_code}")
-            return None
-            
-    except requests.exceptions.ConnectionError:
-        print("Error: Could not connect to GraphQL endpoint at http://localhost:8000/graphql")
-        print("Make sure the Django server is running.")
-        return None
-    except requests.exceptions.Timeout:
-        print("Error: Request timed out")
-        return None
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error executing GraphQL query: {str(e)}")
         return None
 
 def log_order_reminders(orders_data):
